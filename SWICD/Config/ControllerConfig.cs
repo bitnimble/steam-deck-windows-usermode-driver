@@ -11,6 +11,7 @@ namespace SWICD.Config
         public ButtonMapping ButtonMapping { get; set; } = new ButtonMapping();
         public AxisMapping AxisMapping { get; set; } = new AxisMapping();
         public KeyboardMapping KeyboardMapping { get; set; } = new KeyboardMapping();
+        public AxisKeyboardMapping AxisKeyboardMapping { get; set; } = new AxisKeyboardMapping();
         public MouseMapping MouseMapping { get; set; } = new MouseMapping();
 
         public ControllerConfig()
@@ -35,6 +36,7 @@ namespace SWICD.Config
             clone.ButtonMapping = (ButtonMapping)ButtonMapping.Clone();
             clone.AxisMapping = (AxisMapping)AxisMapping.Clone();
             clone.KeyboardMapping = (KeyboardMapping)KeyboardMapping.Clone();
+            clone.AxisKeyboardMapping = (AxisKeyboardMapping)AxisKeyboardMapping.Clone();
             clone.MouseMapping = (MouseMapping)MouseMapping.Clone();
             return clone;
         }
@@ -46,6 +48,7 @@ namespace SWICD.Config
                    EqualityComparer<ProfileSettings>.Default.Equals(ProfileSettings, config.ProfileSettings) &&
                    EqualityComparer<ButtonMapping>.Default.Equals(ButtonMapping, config.ButtonMapping) &&
                    EqualityComparer<KeyboardMapping>.Default.Equals(KeyboardMapping, config.KeyboardMapping) &&
+                   EqualityComparer<AxisKeyboardMapping>.Default.Equals(AxisKeyboardMapping, config.AxisKeyboardMapping) &&
                    EqualityComparer<MouseMapping>.Default.Equals(MouseMapping, config.MouseMapping) &&
                    EqualityComparer<AxisMapping>.Default.Equals(AxisMapping, config.AxisMapping);
         }

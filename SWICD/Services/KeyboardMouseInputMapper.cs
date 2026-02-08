@@ -16,6 +16,8 @@ namespace SWICD.Services
 {
     internal class KeyboardMouseInputMapper
     {
+        private const short AxisKeyboardThreshold = short.MaxValue / 2;
+
         private HIDController _mouseHidController = new HIDController();
         private HIDController _keyboardHidController = new HIDController();
         private KeyboardUtils _keyboardUtils = new KeyboardUtils();
@@ -24,6 +26,9 @@ namespace SWICD.Services
 
         private bool LastLeftMouseButtonState = false;
         private bool LastRightMouseButtonState = false;
+
+        private Dictionary<HardwareAxis, bool> _lastAxisPositiveState = new Dictionary<HardwareAxis, bool>();
+        private Dictionary<HardwareAxis, bool> _lastAxisNegativeState = new Dictionary<HardwareAxis, bool>();
 
         public KeyboardMouseInputMapper()
         {
@@ -247,6 +252,36 @@ namespace SWICD.Services
             LastRightMouseButtonState = rightMouse;
         }
 
+        private void AddKeyToReport(string key, ref byte modifiers, List<byte> pressedKeys)
+        {
+            if (key == null || key == String.Empty || key == "NONE")
+                return;
+
+            if (key.StartsWith("["))
+            {
+                int bit = _keyboardUtils.GetModifierKeyCode(key);
+                byte m1;
+                switch (bit)
+                {
+                    case 0: m1 = 1; break;
+                    case 1: m1 = 2; break;
+                    case 2: m1 = 4; break;
+                    case 3: m1 = 8; break;
+                    case 4: m1 = 16; break;
+                    case 5: m1 = 32; break;
+                    case 6: m1 = 64; break;
+                    case 7: m1 = 128; break;
+                    default: m1 = 0; break;
+                }
+                modifiers = (byte)(modifiers | m1);
+            }
+            else
+            {
+                if (pressedKeys.Count() < 6)
+                    pressedKeys.Add(_keyboardUtils.GetKeyKeyCode(key));
+            }
+        }
+
         public void MapKeyboardInput(ControllerConfig config, NeptuneControllerInputState input)
         {
             if ((DateTime.UtcNow - _lastPing).TotalMilliseconds > 200)
@@ -255,53 +290,67 @@ namespace SWICD.Services
                 _lastPing = DateTime.UtcNow;
             }
 
-            if (_lastState != null)
+            // Determine current axis threshold states
+            bool axisStateChanged = false;
+            Dictionary<HardwareAxis, bool> currentAxisPositive = new Dictionary<HardwareAxis, bool>();
+            Dictionary<HardwareAxis, bool> currentAxisNegative = new Dictionary<HardwareAxis, bool>();
+
+            foreach (var axis in input.AxesState.Axes)
             {
-                if (!_lastState.ButtonState.Equals(input.ButtonState))
+                var axisConfig = config.AxisKeyboardMapping[(HardwareAxis)axis];
+                bool positiveActive = false;
+                bool negativeActive = false;
+
+                if (axisConfig.PositiveKey != "NONE" || axisConfig.NegativeKey != "NONE")
                 {
-                    _lastState = input;
-                    List<byte> pressedKeys = new List<byte>();
-                    byte modifiers = 0;
-
-                    foreach (var btn in input.ButtonState.Buttons)
-                        if (config.KeyboardMapping[(HardwareButton)btn] != null &&
-                            config.KeyboardMapping[(HardwareButton)btn] != String.Empty &&
-                            input.ButtonState[btn])
-                        {
-                            var key = config.KeyboardMapping[(HardwareButton)btn];
-
-                            if (key == "NONE")
-                                continue;
-
-                            if (key.StartsWith("["))
-                            {
-                                int bit = _keyboardUtils.GetModifierKeyCode(key);
-                                byte m1;
-                                switch (bit)
-                                {
-                                    case 0: m1 = 1; break;
-                                    case 1: m1 = 2; break;
-                                    case 2: m1 = 4; break;
-                                    case 3: m1 = 8; break;
-                                    case 4: m1 = 16; break;
-                                    case 5: m1 = 32; break;
-                                    case 6: m1 = 64; break;
-                                    case 7: m1 = 128; break;
-                                    default: m1 = 0; break;
-                                }
-                                modifiers = (byte)(modifiers | m1);
-                            }
-                            else
-                            {
-                                if (pressedKeys.Count() < 6)
-                                    pressedKeys.Add(_keyboardUtils.GetKeyKeyCode(key));
-                            }
-                        }
-
-                    SendKeyboardData(modifiers, pressedKeys);
+                    short value = input.AxesState[axis];
+                    positiveActive = value > AxisKeyboardThreshold;
+                    negativeActive = value < -AxisKeyboardThreshold;
                 }
+
+                currentAxisPositive[(HardwareAxis)axis] = positiveActive;
+                currentAxisNegative[(HardwareAxis)axis] = negativeActive;
+
+                bool lastPositive = _lastAxisPositiveState.ContainsKey((HardwareAxis)axis) && _lastAxisPositiveState[(HardwareAxis)axis];
+                bool lastNegative = _lastAxisNegativeState.ContainsKey((HardwareAxis)axis) && _lastAxisNegativeState[(HardwareAxis)axis];
+
+                if (positiveActive != lastPositive || negativeActive != lastNegative)
+                    axisStateChanged = true;
             }
 
+            bool buttonStateChanged = _lastState != null && !_lastState.ButtonState.Equals(input.ButtonState);
+
+            if (_lastState != null && (buttonStateChanged || axisStateChanged))
+            {
+                List<byte> pressedKeys = new List<byte>();
+                byte modifiers = 0;
+
+                // Collect keys from button mappings
+                foreach (var btn in input.ButtonState.Buttons)
+                    if (config.KeyboardMapping[(HardwareButton)btn] != null &&
+                        config.KeyboardMapping[(HardwareButton)btn] != String.Empty &&
+                        input.ButtonState[btn])
+                    {
+                        AddKeyToReport(config.KeyboardMapping[(HardwareButton)btn], ref modifiers, pressedKeys);
+                    }
+
+                // Collect keys from axis keyboard mappings
+                foreach (var axis in input.AxesState.Axes)
+                {
+                    var axisConfig = config.AxisKeyboardMapping[(HardwareAxis)axis];
+
+                    if (currentAxisPositive[(HardwareAxis)axis])
+                        AddKeyToReport(axisConfig.PositiveKey, ref modifiers, pressedKeys);
+
+                    if (currentAxisNegative[(HardwareAxis)axis])
+                        AddKeyToReport(axisConfig.NegativeKey, ref modifiers, pressedKeys);
+                }
+
+                SendKeyboardData(modifiers, pressedKeys);
+            }
+
+            _lastAxisPositiveState = currentAxisPositive;
+            _lastAxisNegativeState = currentAxisNegative;
             _lastState = input;
         }
     }
