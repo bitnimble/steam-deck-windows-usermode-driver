@@ -21,6 +21,7 @@ namespace SWICD.ViewModels
         public ObservableCollection<MouseMappingModel> MouseMappings { get; set; } = new ObservableCollection<MouseMappingModel>();
         public ObservableCollection<ButtonMappingModel> ButtonMappings { get; set; } = new ObservableCollection<ButtonMappingModel>();
         public ObservableCollection<AxisMappingModel> AxisMappings { get; set; } = new ObservableCollection<AxisMappingModel>();
+        public ObservableCollection<AxisKeyboardMappingModel> AxisKeyboardMappings { get; set; } = new ObservableCollection<AxisKeyboardMappingModel>();
 
         public Visibility DeleteButtonVisible => Executable != null ? Visibility.Visible : Visibility.Hidden;
         public CommandHandler DeleteButtonClickCommand => new CommandHandler((obj) => OnDeleteButtonClick());
@@ -151,6 +152,17 @@ namespace SWICD.ViewModels
                         Inverted = ControllerConfig.AxisMapping[axis].Inverted,
                         SetAxisAction = val => ControllerConfig.AxisMapping[axis].EmulatedAxis = val,
                         SetActivationButtonAction = val => ControllerConfig.AxisMapping[axis].ActivationButton = val,
+                    });
+
+            foreach (HardwareAxis axis in Enum.GetValues(typeof(HardwareAxis)))
+                if (axis != HardwareAxis.None)
+                    AxisKeyboardMappings.Add(new AxisKeyboardMappingModel()
+                    {
+                        HardwareAxis = axis,
+                        PositiveKey = ControllerConfig.AxisKeyboardMapping[axis].PositiveKey,
+                        NegativeKey = ControllerConfig.AxisKeyboardMapping[axis].NegativeKey,
+                        SetPositiveKeyAction = val => ControllerConfig.AxisKeyboardMapping[axis].PositiveKey = val,
+                        SetNegativeKeyAction = val => ControllerConfig.AxisKeyboardMapping[axis].NegativeKey = val,
                     });
         }
         public void NotifyPropertyChanged(string propName)
